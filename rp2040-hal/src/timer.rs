@@ -1,7 +1,14 @@
 //! Timer Peripheral
-// See [Chapter 4 Section 6](https://datasheets.raspberrypi.org/rp2040/rp2040_datasheet.pdf) for more details
+//!
+//! The Timer peripheral on RP2040 consists of a 64-bit counter and 4 alarms.  
+//! The Counter is incremented once per microsecond. It obtains its clock source from the watchdog peripheral, you must enable the watchdog before using this peripheral.  
+//! Since it would take thousands of years for this counter to overflow you do not need to write logic for dealing with this if using get_counter.  
+//!
+//! Each of the 4 alarms can match on the lower 32 bits of Counter and trigger an interrupt.
+//!
+//! See [Chapter 4 Section 6](https://datasheets.raspberrypi.org/rp2040/rp2040_datasheet.pdf) of the datasheet for more details.
 
-use embedded_time::duration::Microseconds;
+use fugit::{Duration, MicrosDurationU64};
 
 use crate::atomic_register_access::{write_bitmask_clear, write_bitmask_set};
 use crate::pac::{RESETS, TIMER};
@@ -46,83 +53,98 @@ impl Timer {
     pub fn count_down(&self) -> CountDown<'_> {
         CountDown {
             timer: self,
-            period: Microseconds::new(0),
+            period: MicrosDurationU64::nanos(0),
             next_end: None,
         }
     }
 
     /// Retrieve a reference to alarm 0. Will only return a value the first time this is called
     pub fn alarm_0(&mut self) -> Option<Alarm0> {
-        cortex_m::interrupt::free(|_| {
-            if self.alarms[0] {
-                self.alarms[0] = false;
-                Some(Alarm0(PhantomData))
-            } else {
-                None
-            }
-        })
+        if self.alarms[0] {
+            self.alarms[0] = false;
+            Some(Alarm0(PhantomData))
+        } else {
+            None
+        }
     }
 
     /// Retrieve a reference to alarm 1. Will only return a value the first time this is called
     pub fn alarm_1(&mut self) -> Option<Alarm1> {
-        cortex_m::interrupt::free(|_| {
-            if self.alarms[1] {
-                self.alarms[1] = false;
-                Some(Alarm1(PhantomData))
-            } else {
-                None
-            }
-        })
+        if self.alarms[1] {
+            self.alarms[1] = false;
+            Some(Alarm1(PhantomData))
+        } else {
+            None
+        }
     }
 
     /// Retrieve a reference to alarm 2. Will only return a value the first time this is called
     pub fn alarm_2(&mut self) -> Option<Alarm2> {
-        cortex_m::interrupt::free(|_| {
-            if self.alarms[2] {
-                self.alarms[2] = false;
-                Some(Alarm2(PhantomData))
-            } else {
-                None
-            }
-        })
+        if self.alarms[2] {
+            self.alarms[2] = false;
+            Some(Alarm2(PhantomData))
+        } else {
+            None
+        }
     }
 
     /// Retrieve a reference to alarm 3. Will only return a value the first time this is called
     pub fn alarm_3(&mut self) -> Option<Alarm3> {
-        cortex_m::interrupt::free(|_| {
-            if self.alarms[3] {
-                self.alarms[3] = false;
-                Some(Alarm3(PhantomData))
-            } else {
-                None
-            }
-        })
+        if self.alarms[3] {
+            self.alarms[3] = false;
+            Some(Alarm3(PhantomData))
+        } else {
+            None
+        }
     }
 }
 
-/// Delay implementation
+/// Implementation of the embedded_hal::Timer traits using rp2040_hal::timer counter
+///
+/// ## Usage
+/// ```no_run
+/// use embedded_hal::timer::{CountDown, Cancel};
+/// use fugit::ExtU32;
+/// use rp2040_hal;
+/// let mut pac = rp2040_hal::pac::Peripherals::take().unwrap();
+/// // Configure the Timer peripheral in count-down mode
+/// let timer = rp2040_hal::Timer::new(pac.TIMER, &mut pac.RESETS);
+/// let mut count_down = timer.count_down();
+/// // Create a count_down timer for 500 milliseconds
+/// count_down.start(500.millis());
+/// // Block until timer has elapsed
+/// let _ = nb::block!(count_down.wait());
+/// // Restart the count_down timer with a period of 100 milliseconds
+/// count_down.start(100.millis());
+/// // Cancel it immediately
+/// count_down.cancel();
+/// ```
 pub struct CountDown<'timer> {
     timer: &'timer Timer,
-    period: embedded_time::duration::Microseconds<u64>,
+    period: MicrosDurationU64,
     next_end: Option<u64>,
 }
 
 impl embedded_hal::timer::CountDown for CountDown<'_> {
-    type Time = embedded_time::duration::Microseconds<u64>;
+    type Time = MicrosDurationU64;
 
     fn start<T>(&mut self, count: T)
     where
         T: Into<Self::Time>,
     {
         self.period = count.into();
-        self.next_end = Some(self.timer.get_counter().wrapping_add(self.period.0));
+        self.next_end = Some(
+            self.timer
+                .get_counter()
+                .wrapping_add(self.period.to_micros()),
+        );
     }
 
     fn wait(&mut self) -> nb::Result<(), void::Void> {
         if let Some(end) = self.next_end {
             let ts = self.timer.get_counter();
             if ts >= end {
-                self.next_end = Some(end.wrapping_add(self.period.0));
+                self.next_end = Some(end.wrapping_add(self.period.to_micros()));
                 Ok(())
             } else {
                 Err(nb::Error::WouldBlock)
@@ -169,12 +191,12 @@ pub trait Alarm {
     /// this will trigger interrupt whenever this time elapses.
     ///
     /// The RP2040 has been observed to take a little while to schedule an alarm. For this
-    /// reason, the minimum time that this function accepts is `10.microseconds()`
+    /// reason, the minimum time that this function accepts is `10.micros()`
     ///
     /// [enable_interrupt]: #method.enable_interrupt
-    fn schedule<TIME: Into<Microseconds>>(
+    fn schedule<const NOM: u32, const DENOM: u32>(
         &mut self,
-        countdown: TIME,
+        countdown: Duration<u32, NOM, DENOM>,
     ) -> Result<(), ScheduleAlarmError>;
 
     /// Return true if this alarm is finished.
@@ -237,14 +259,14 @@ macro_rules! impl_alarm {
             #[doc = $int_name]
             /// ` whenever this time elapses.
             ///
-            /// The RP2040 has been observed to take a little while to schedule an alarm. For this reason, the minimum time that this function accepts is `10.microseconds()`
+            /// The RP2040 has been observed to take a little while to schedule an alarm. For this reason, the minimum time that this function accepts is `10.micros()`
             ///
             /// [enable_interrupt]: #method.enable_interrupt
-            fn schedule<TIME: Into<Microseconds>>(
+            fn schedule<const NOM: u32, const DENOM: u32>(
                 &mut self,
-                countdown: TIME,
+                countdown: Duration<u32, NOM, DENOM>,
             ) -> Result<(), ScheduleAlarmError> {
-                let duration = countdown.into().0;
+                let duration = countdown.to_micros();
 
                 const MIN_MICROSECONDS: u32 = 10;
                 if duration < MIN_MICROSECONDS {
@@ -288,27 +310,27 @@ pub enum ScheduleAlarmError {
 impl_alarm!(Alarm0 {
     rb: alarm0,
     int: alarm_0,
-    int_name: "IRQ_TIMER_0",
+    int_name: "TIMER_IRQ_0",
     armed_bit_mask: 0b0001
 });
 
 impl_alarm!(Alarm1 {
     rb: alarm1,
     int: alarm_1,
-    int_name: "IRQ_TIMER_1",
+    int_name: "TIMER_IRQ_1",
     armed_bit_mask: 0b0010
 });
 
 impl_alarm!(Alarm2 {
     rb: alarm2,
     int: alarm_2,
-    int_name: "IRQ_TIMER_2",
+    int_name: "TIMER_IRQ_2",
     armed_bit_mask: 0b0100
 });
 
 impl_alarm!(Alarm3 {
     rb: alarm3,
     int: alarm_3,
-    int_name: "IRQ_TIMER_3",
+    int_name: "TIMER_IRQ_3",
     armed_bit_mask: 0b1000
 });

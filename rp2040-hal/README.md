@@ -102,6 +102,13 @@ will be breaking changes even in minor versions of rp2040-hal.
 Support for embedded-hal 1.0(-alpha) exists in parallel to support for
 embedded-hal 0.2: Traits of both versions are implemented and can be used
 at the same time.
+The new blocking [SPI traits](https://docs.rs/embedded-hal/1.0.0-alpha.8/embedded_hal/spi/blocking/index.html)
+are not yet implemented.
+
+### Support for critical-section 0.2
+
+While `rp2040-hal` uses critical-section 1.0, it still provides support for version 0.2.
+That version is deprecated, and support will be removed in a future release. Please upgrade.
 
 <!-- CONTRIBUTING -->
 ## Contributing

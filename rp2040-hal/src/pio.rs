@@ -620,6 +620,7 @@ impl<SM: ValidStateMachine> StateMachine<SM, Stopped> {
     // `UninitStateMachine` byt adding a program.
     pub fn set_pins(&mut self, pins: impl IntoIterator<Item = (u8, PinState)>) {
         let saved_ctrl = self.sm.sm().sm_pinctrl.read();
+        let saved_execctrl = self.sm.sm().sm_execctrl.read();
         for (pin_num, pin_state) in pins {
             self.sm
                 .sm()
@@ -633,10 +634,11 @@ impl<SM: ValidStateMachine> StateMachine<SM, Stopped> {
                 .encode(),
             );
         }
-        self.sm
-            .sm()
-            .sm_pinctrl
+        let sm = self.sm.sm();
+        sm.sm_pinctrl
             .write(|w| unsafe { w.bits(saved_ctrl.bits()) });
+        sm.sm_execctrl
+            .write(|w| unsafe { w.bits(saved_execctrl.bits()) })
     }
 
     /// Set pin directions.
@@ -649,6 +651,11 @@ impl<SM: ValidStateMachine> StateMachine<SM, Stopped> {
     // `UninitStateMachine` byt adding a program.
     pub fn set_pindirs(&mut self, pindirs: impl IntoIterator<Item = (u8, PinDir)>) {
         let saved_ctrl = self.sm.sm().sm_pinctrl.read();
+        let saved_execctrl = self.sm.sm().sm_execctrl.read();
+        self.sm
+            .sm()
+            .sm_execctrl
+            .modify(|_, w| w.out_sticky().clear_bit());
         for (pinnum, pin_dir) in pindirs {
             self.sm
                 .sm()
@@ -662,10 +669,11 @@ impl<SM: ValidStateMachine> StateMachine<SM, Stopped> {
                 .encode(),
             );
         }
-        self.sm
-            .sm()
-            .sm_pinctrl
+        let sm = self.sm.sm();
+        sm.sm_pinctrl
             .write(|w| unsafe { w.bits(saved_ctrl.bits()) });
+        sm.sm_execctrl
+            .write(|w| unsafe { w.bits(saved_execctrl.bits()) });
     }
 }
 
@@ -1160,9 +1168,14 @@ impl<SM: ValidStateMachine> Rx<SM> {
             .modify(|_, w| w.autopush().bit(enable))
     }
 
-    /// Indicate if the tx FIFO is full
+    /// Indicate if the rx FIFO is empty
     pub fn is_empty(&self) -> bool {
         self.register_block().fstat.read().rxempty().bits() & (1 << SM::id()) != 0
+    }
+
+    /// Indicate if the rx FIFO is full
+    pub fn is_full(&self) -> bool {
+        self.register_block().fstat.read().rxfull().bits() & (1 << SM::id()) != 0
     }
 }
 
