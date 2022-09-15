@@ -26,7 +26,7 @@ use crate::resets::SubsystemReset;
 use core::marker::PhantomData;
 use core::mem;
 use core::sync::atomic::{compiler_fence, Ordering};
-use embedded_dma::{StaticReadBuffer, StaticWriteBuffer};
+use embedded_dma::{ReadBuffer, WriteBuffer};
 use rp2040_pac::DMA;
 
 /// DMA unit.
@@ -353,7 +353,7 @@ pub trait ReadTarget {
     ///
     /// # Safety
     ///
-    /// This function has the same safety guarantees as `StaticReadBuffer::static_read_buffer`.
+    /// This function has the same safety guarantees as [`ReadBuffer::read_buffer`].
     fn rx_address_count(&self) -> (u32, u32);
 
     /// Returns whether the address shall be incremented after each transfer.
@@ -366,8 +366,8 @@ pub trait ReadTarget {
 /// two DMA channels. In the case of peripherals, the function can always return the same values.
 pub trait EndlessReadTarget: ReadTarget {}
 
-impl<B: StaticReadBuffer> ReadTarget for B {
-    type ReceivedWord = <B as StaticReadBuffer>::Word;
+impl<B: ReadBuffer> ReadTarget for B {
+    type ReceivedWord = <B as ReadBuffer>::Word;
 
     fn rx_treq() -> Option<u8> {
         None
@@ -375,7 +375,7 @@ impl<B: StaticReadBuffer> ReadTarget for B {
 
     fn rx_address_count(&self) -> (u32, u32) {
         // Safety: We only call the function once per buffer.
-        let (ptr, len) = unsafe { self.static_read_buffer() };
+        let (ptr, len) = unsafe { self.read_buffer() };
         (ptr as u32, len as u32)
     }
 
@@ -409,8 +409,8 @@ pub trait WriteTarget {
 /// two DMA channels. In the case of peripherals, the function can always return the same values.
 pub trait EndlessWriteTarget: WriteTarget {}
 
-impl<B: StaticWriteBuffer> WriteTarget for B {
-    type TransmittedWord = <B as StaticWriteBuffer>::Word;
+impl<B: WriteBuffer> WriteTarget for B {
+    type TransmittedWord = <B as WriteBuffer>::Word;
 
     fn tx_treq() -> Option<u8> {
         None
@@ -418,7 +418,7 @@ impl<B: StaticWriteBuffer> WriteTarget for B {
 
     fn tx_address_count(&mut self) -> (u32, u32) {
         // Safety: We only call the function once per buffer.
-        let (ptr, len) = unsafe { self.static_write_buffer() };
+        let (ptr, len) = unsafe { self.write_buffer() };
         (ptr as u32, len as u32)
     }
 
