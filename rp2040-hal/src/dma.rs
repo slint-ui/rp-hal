@@ -318,9 +318,7 @@ impl<CH: SingleChannel> ChannelConfig for CH {
             .modify(|_, w| unsafe { w.chain_to().bits(other.id()).en().clear_bit() });
         if self.ch().ch_al1_ctrl.read().busy().bit_is_set() {
             // This channel is still active, so just continue.
-            self.ch()
-                .ch_al1_ctrl
-                .modify(|_, w| unsafe { w.en().set_bit() });
+            self.ch().ch_al1_ctrl.modify(|_, w| w.en().set_bit());
             return;
         } else {
             // This channel has already finished, so just start the other channel directly.
@@ -870,7 +868,7 @@ where
         self.to_pace = pace;
     }
 
-    pub fn start(mut self) -> Bidirectional<CH1, CH2, FROM, BIDI, TO> {
+    pub fn start(self) -> Bidirectional<CH1, CH2, FROM, BIDI, TO> {
         // TODO
         panic!("Not yet implemented.");
     }
@@ -1080,8 +1078,6 @@ pub enum DMAError {
     /// was specified.
     IllegalConfig,
 }
-
-
 
 /// The DREQ value for PIO0's TX FIFO 0
 pub const DREQ_PIO0_TX0: u8 = 0;
