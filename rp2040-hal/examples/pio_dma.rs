@@ -20,7 +20,7 @@ use rp2040_hal as hal;
 
 #[link_section = ".boot2"]
 #[used]
-pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER;
+pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 
 #[entry]
 fn main() -> ! {
@@ -50,15 +50,12 @@ fn main() -> ! {
 
     // Define a PIO program which reads data from the TX FIFO bit by bit, configures the LED
     // according to the data, and then writes the data back to the RX FIFO.
-    let program = pio_proc::pio!(
-        32,
-        "
-.wrap_target
-    out x, 1
-    mov pins, x
-    in x, 1 [13]
-.wrap
-        "
+    let program = pio_proc::pio_asm!(
+        ".wrap_target",
+        "out x, 1",
+        "mov pins, x",
+        "in x, 1 [13]",
+        ".wrap"
     );
 
     // Initialize and start PIO
@@ -72,7 +69,7 @@ fn main() -> ! {
         .autopush(true)
         .build(sm0);
     // The GPIO pin needs to be configured as an output.
-    sm.set_pindirs_with_mask(1 << led_pin_id, 1 << led_pin_id);
+    sm.set_pindirs([(led_pin_id, hal::pio::PinDir::Output)]);
     sm.start();
 
     // Read and write without DMA.
