@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update embedded-hal alpha support to version 1.0.0-alpha.9 - @jannic
   (Non-blocking traits were moved to embedded-hal-nb, which is not yet supported)
+  
+## [0.6.1] - 2022-11-30
+
+### Changed
+
+- Upgraded dependency on critical-section 0.2 to 0.2.8 - @jannic
+  (There is also a dependency on version 1.0.0)
+- Remove critical-section impl for version 0.2 - @jannic
+  Both 0.2.8 and 1.x use the same symbols internally to implement the
+  critical sections, so one impl is sufficient, and having both causes
+  compilation errors
 
 ## [0.6.0] - 2022-08-26
 
@@ -170,7 +181,9 @@ The Minimum-Supported Rust Version (MSRV) for this release is 1.54.
 
 - Initial release
 
-[Unreleased]: https://github.com/rp-rs/rp-hal/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/rp-rs/rp-hal/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/rp-rs/rp-hal/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/rp-rs/rp-hal/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/rp-rs/rp-hal/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rp-rs/rp-hal/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rp-rs/rp-hal/compare/v0.2.0...v0.3.0
